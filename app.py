@@ -1,11 +1,15 @@
 import streamlit as st
+
 from database.lead_db import update_lead_status
+
 from workflow.sales_graph import create_sales_graph
+
 from lead_actions import (
     get_snooze_options,
     calculate_snooze_date,
     prepare_followup
 )
+
 from database.lead_db import (
     create_database,
     get_all_leads,
@@ -14,8 +18,10 @@ from database.lead_db import (
     get_followup_status,
     get_followup_statistics,
     get_smart_followup_list,
-    snooze_lead
+    snooze_lead,
+    delete_unknown_leads
 )
+
 
 # ==========================================================
 # PAGE CONFIGURATION
@@ -65,6 +71,7 @@ with st.sidebar:
         "personalized follow-ups."
     )
 
+
 # ==========================================================
 # DASHBOARD STATISTICS
 # ==========================================================
@@ -77,49 +84,62 @@ st.header("📊 Sales Follow-Up Overview")
 
 col1, col2, col3, col4, col5, col6 = st.columns(6)
 
+
 with col1:
+
     st.metric(
         "Total Leads",
         stats["total"]
     )
 
+
 with col2:
+
     st.metric(
         "🔥 Hot Leads",
         stats["hot"]
     )
 
+
 with col3:
+
     st.metric(
         "⚠️ High Risk",
         stats["at_risk"]
     )
 
+
 with col4:
+
     st.metric(
         "🔴 Overdue",
         followup_stats["overdue"]
     )
 
+
 with col5:
+
     st.metric(
         "🟠 Due Today",
         followup_stats["today"]
     )
 
+
 with col6:
+
     st.metric(
         "🟢 Upcoming",
         followup_stats["upcoming"]
     )
 
-    st.divider()
 
-    st.info(
-        "AI Pipeline:\n\n"
-        "Conversation → Analysis → Score → Risk → "
-        "Next Action → Follow-Up"
-    )
+st.divider()
+
+st.info(
+    "AI Pipeline:\n\n"
+    "Conversation → Analysis → Score → Risk → "
+    "Next Action → Follow-Up"
+)
 
 
 # ==========================================================
@@ -193,9 +213,17 @@ if "result" in st.session_state:
     result = st.session_state["result"]
 
     analysis = result["analysis"]
+
     action = result["next_action"]
+
     followup = result["followup"]
+
     timing = result["followup_timing"]
+
+
+    # ======================================================
+    # FOLLOW-UP TIMING
+    # ======================================================
 
     st.subheader("⏰ AI Recommended Follow-Up")
 
@@ -207,6 +235,10 @@ if "result" in st.session_state:
         f"**Why:** {timing.get('reason', '')}"
     )
 
+
+    # ======================================================
+    # LEAD INTELLIGENCE
+    # ======================================================
 
     st.divider()
 
@@ -260,6 +292,7 @@ if "result" in st.session_state:
 
     col1, col2 = st.columns(2)
 
+
     with col1:
 
         st.write(
@@ -271,6 +304,7 @@ if "result" in st.session_state:
             f"**Company:** "
             f"{analysis.get('company', 'Unknown')}"
         )
+
 
     with col2:
 
@@ -296,6 +330,7 @@ if "result" in st.session_state:
         []
     )
 
+
     if signals:
 
         for signal in signals:
@@ -306,7 +341,9 @@ if "result" in st.session_state:
 
     else:
 
-        st.write("No strong buying signals detected.")
+        st.write(
+            "No strong buying signals detected."
+        )
 
 
     # ------------------------------------------------------
@@ -319,6 +356,7 @@ if "result" in st.session_state:
         "objections",
         []
     )
+
 
     if objections:
 
@@ -368,6 +406,7 @@ if "result" in st.session_state:
     # ------------------------------------------------------
 
     st.divider()
+
     st.subheader("✉️ AI-Generated Follow-Up")
 
     subject = st.text_input(
@@ -381,12 +420,24 @@ if "result" in st.session_state:
         height=180
     )
 
+
+    # ======================================================
+    # FOLLOW-UP REVIEW STATE
+    # ======================================================
+
     if "followup_reviewed" not in st.session_state:
+
         st.session_state["followup_reviewed"] = False
 
+
     if "followup_approved" not in st.session_state:
+
         st.session_state["followup_approved"] = False
 
+
+    # ======================================================
+    # REVIEW FOLLOW-UP
+    # ======================================================
 
     if st.button("🔍 Review Follow-Up"):
 
@@ -394,6 +445,7 @@ if "result" in st.session_state:
             subject,
             message
         )
+
 
         if review["valid"]:
 
@@ -416,158 +468,153 @@ if "result" in st.session_state:
             )
 
 
+    # ======================================================
+    # HUMAN APPROVAL
+    # ======================================================
+
     if st.session_state["followup_reviewed"]:
 
-            st.divider()
+        st.divider()
 
-            st.subheader("👤 Human Approval")
+        st.subheader("👤 Human Approval")
 
-            st.info(
-                    "Review the AI-generated follow-up before approving it."
-            )
+        st.info(
+            "Review the AI-generated follow-up before approving it."
+        )
 
-            # 1️⃣ APPROVE
-            
-            if st.button(
-                    "✅ Approve Follow-Up",
-                    use_container_width=True,
-                    key="approve_followup_button"
-            ):
 
-                    st.session_state["followup_approved"] = True
+        # --------------------------------------------------
+        # APPROVE
+        # --------------------------------------------------
 
-                    lead_id = result.get("lead_id")
+        if st.button(
+            "✅ Approve Follow-Up",
+            use_container_width=True,
+            key="approve_followup_button"
+        ):
 
-                    if lead_id:
-                            update_lead_status(
-                                lead_id,
-                                "Approved"
-                            )
+            st.session_state["followup_approved"] = True
 
-                            st.success(
-                                "✅ Follow-up approved by salesperson."
-                            )
+            lead_id = result.get("lead_id")
 
-            # 2️⃣ NEEDS EDITING
-            if st.button(
-                    "✏️ Needs Editing",
-                    use_container_width=True,
-                    key="edit_followup_button"
-                ):
 
-                    st.session_state["followup_approved"] = False
-                    st.session_state["followup_reviewed"] = False
+            if lead_id:
 
-                    st.warning(
-                            "✏️ Follow-up sent back for editing."
-                    )
-
-            # 3️⃣ SNOOZE
-            st.divider()
-            
-            st.subheader("⏰ Snooze Follow-Up")
-
-            snooze_options = {
-                    "Tomorrow": 1,
-                    "In 3 Days": 3,
-                    "Next Week": 7
-            }
-
-            selected_snooze = st.selectbox(
-                    "Remind me:",
-                    list(snooze_options.keys())
-            )
-
-            if st.button(
-                    "⏰ Snooze Lead",
-                    use_container_width=True,
-                    key="snooze_lead_button"
-            ):
-
-                    lead_id = result.get("lead_id")
-
-                    if lead_id:
-
-                        snooze_lead(
-                            lead_id,
-                            snooze_options[selected_snooze]
-                        )
-
-                        st.success(
-                            f"⏰ Lead snoozed until {selected_snooze}."
-                        )
-
-            # 4️⃣ COMPLETED
-            st.divider()
-
-            st.subheader("✔️ Lead Status")
-
-            if st.button(
-                "✔️ Mark Lead as Completed",
-                use_container_width=True,
-                key="complete_lead_button"
-            ):
-
-                lead_id = result.get("lead_id")
-
-                if lead_id:
-
-                    update_lead_status(
-                        lead_id,
-                        "Completed"
+                update_lead_status(
+                    lead_id,
+                    "Approved"
                 )
 
-                    st.success(
-                        "✅ Lead marked as completed."
-                    )
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-                st.session_state["followup_approved"] = True
-
-                lead_id = result.get("lead_id")
-
-                if lead_id:
-
-                    update_lead_status(
-                        lead_id,
-                        "Approved"
-                    )
-
-                    st.success(
-                        "✅ Follow-up approved by salesperson."
-                    )
-
-                else:
-
-                    st.warning(
-                        "⚠️ Lead ID not found. Approval was not saved."
-                    )
-
-    with col2:
-
-                st.session_state["followup_approved"] = False
-
-                st.session_state["followup_reviewed"] = False
-
-                st.warning(
-                    "✏️ Follow-up sent back for editing."
+                st.success(
+                    "✅ Follow-up approved by salesperson."
                 )
-    
-    # ------------------------------------------------------
+
+
+        # --------------------------------------------------
+        # NEEDS EDITING
+        # --------------------------------------------------
+
+        if st.button(
+            "✏️ Needs Editing",
+            use_container_width=True,
+            key="edit_followup_button"
+        ):
+
+            st.session_state["followup_approved"] = False
+
+            st.session_state["followup_reviewed"] = False
+
+            st.warning(
+                "✏️ Follow-up sent back for editing."
+            )
+
+
+        # --------------------------------------------------
+        # SNOOZE
+        # --------------------------------------------------
+
+        st.divider()
+
+        st.subheader("⏰ Snooze Follow-Up")
+
+        snooze_options = {
+            "Tomorrow": 1,
+            "In 3 Days": 3,
+            "Next Week": 7
+        }
+
+
+        selected_snooze = st.selectbox(
+            "Remind me:",
+            list(snooze_options.keys())
+        )
+
+
+        if st.button(
+            "⏰ Snooze Lead",
+            use_container_width=True,
+            key="snooze_lead_button"
+        ):
+
+            lead_id = result.get("lead_id")
+
+
+            if lead_id:
+
+                snooze_lead(
+                    lead_id,
+                    snooze_options[selected_snooze]
+                )
+
+                st.success(
+                    f"⏰ Lead snoozed until {selected_snooze}."
+                )
+
+
+        # --------------------------------------------------
+        # COMPLETED
+        # --------------------------------------------------
+
+        st.divider()
+
+        st.subheader("✔️ Lead Status")
+
+
+        if st.button(
+            "✔️ Mark Lead as Completed",
+            use_container_width=True,
+            key="complete_lead_button"
+        ):
+
+            lead_id = result.get("lead_id")
+
+
+            if lead_id:
+
+                update_lead_status(
+                    lead_id,
+                    "Completed"
+                )
+
+                st.success(
+                    "✅ Lead marked as completed."
+                )
+
+
+    # ======================================================
     # PERSONALIZATION
-    # ------------------------------------------------------
+    # ======================================================
 
     st.subheader(
         "🎯 Personalization Used"
     )
 
+
     points = followup.get(
         "personalization_points",
         []
     )
+
 
     for point in points:
 
@@ -577,10 +624,46 @@ if "result" in st.session_state:
 
 
 # ==========================================================
-# PRIORITIZED FOLLOW-UP LIST
+# DATABASE CLEANUP
 # ==========================================================
 
 st.divider()
+
+with st.expander("🧹 Database Cleanup"):
+
+    st.write(
+        "Remove old leads where the prospect name "
+        "was saved as Unknown."
+    )
+
+
+    if st.button(
+        "🗑️ Remove Unknown Leads",
+        type="secondary",
+        use_container_width=True
+    ):
+
+        deleted = delete_unknown_leads()
+
+
+        if deleted > 0:
+
+            st.success(
+                f"✅ Removed {deleted} Unknown lead(s)."
+            )
+
+            st.rerun()
+
+        else:
+
+            st.info(
+                "No Unknown leads found."
+            )
+
+
+# ==========================================================
+# PRIORITIZED FOLLOW-UP LIST
+# ==========================================================
 
 st.header("📋 Prioritized Follow-Up List")
 
@@ -596,14 +679,17 @@ if not leads:
 else:
 
     for lead in leads:
+
         followup_status = get_followup_status(
             lead["followup_due"],
             lead["status"]
         )
 
+
         with st.container(border=True):
 
             col1, col2, col3, col4 = st.columns(4)
+
 
             with col1:
 
@@ -619,6 +705,7 @@ else:
                     f"Status: **{lead['status']}**"
                 )
 
+
             with col2:
 
                 st.write(
@@ -631,6 +718,7 @@ else:
                     f"{lead['lead_priority']}"
                 )
 
+
             with col3:
 
                 st.write(
@@ -642,6 +730,7 @@ else:
                     f"Risk Score: "
                     f"{lead['risk_score']}/100"
                 )
+
 
             with col4:
 
@@ -659,7 +748,13 @@ else:
                     f"{lead['followup_due']}"
                 )
 
+
+            # --------------------------------------------------
+            # LEAD ACTIONS
+            # --------------------------------------------------
+
             col5, col6 = st.columns(2)
+
 
             with col5:
 
@@ -676,6 +771,7 @@ else:
                         )
 
                         st.rerun()
+
 
             with col6:
 
