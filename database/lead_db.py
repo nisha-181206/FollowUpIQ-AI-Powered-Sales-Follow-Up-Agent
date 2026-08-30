@@ -532,5 +532,21 @@ if __name__ == "__main__":
             f"Score: {lead['lead_score']} | "
             f"Risk: {lead['risk_level']}"
         )
+  def clear_all_leads():
+    """Delete all leads from the database for a fresh demo."""
+
+    connection = sqlite3.connect(DATABASE_NAME)
+
+    cursor = connection.cursor()
+
+    cursor.execute("DELETE FROM leads")
+
+    connection.commit()
+
+    deleted_count = cursor.rowcount
+
+    connection.close()
+
+    return deleted_count
 
     print("\n" + "=" * 55)
