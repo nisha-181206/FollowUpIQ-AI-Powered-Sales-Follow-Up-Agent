@@ -1,5 +1,6 @@
 import streamlit as st
 from database.lead_db import update_lead_status
+from database.lead_db import clear_all_leads
 from workflow.sales_graph import create_sales_graph
 from lead_actions import (
     get_snooze_options,
@@ -581,6 +582,25 @@ if "result" in st.session_state:
 # ==========================================================
 
 st.divider()
+with st.expander("🧹 Database Cleanup"):
+
+    st.warning(
+        "This will remove ALL existing leads and give you "
+        "a completely fresh dashboard."
+    )
+
+    if st.button(
+        "🗑️ Clear All Leads",
+        type="secondary"
+    ):
+
+        deleted = clear_all_leads()
+
+        st.success(
+            f"✅ Cleared {deleted} leads."
+        )
+
+        st.rerun()
 
 st.header("📋 Prioritized Follow-Up List")
 
