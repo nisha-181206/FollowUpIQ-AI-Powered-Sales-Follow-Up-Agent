@@ -2,6 +2,10 @@ import sqlite3
 from datetime import datetime, timedelta
 
 
+# ==========================================================
+# DATABASE CONFIGURATION
+# ==========================================================
+
 DATABASE_NAME = "database/followupiq.db"
 
 
@@ -267,15 +271,19 @@ def get_followup_status(followup_due, status):
         now = datetime.now()
 
         if due_date < now:
+
             return "OVERDUE"
 
         elif due_date.date() == now.date():
+
             return "DUE TODAY"
 
         elif (due_date - now).days <= 2:
+
             return "DUE SOON"
 
         else:
+
             return "UPCOMING"
 
     except Exception:
@@ -438,14 +446,20 @@ def get_lead_statistics():
 
     cursor = connection.cursor()
 
-    # Total leads
+    # ------------------------------------------------------
+    # TOTAL LEADS
+    # ------------------------------------------------------
+
     cursor.execute(
         "SELECT COUNT(*) FROM leads"
     )
 
     total = cursor.fetchone()[0]
 
-    # Hot leads
+    # ------------------------------------------------------
+    # HOT LEADS
+    # ------------------------------------------------------
+
     cursor.execute("""
         SELECT COUNT(*)
         FROM leads
@@ -455,7 +469,10 @@ def get_lead_statistics():
 
     hot = cursor.fetchone()[0]
 
-    # High-risk leads
+    # ------------------------------------------------------
+    # HIGH-RISK LEADS
+    # ------------------------------------------------------
+
     cursor.execute("""
         SELECT COUNT(*)
         FROM leads
@@ -465,7 +482,10 @@ def get_lead_statistics():
 
     at_risk = cursor.fetchone()[0]
 
-    # Completed leads
+    # ------------------------------------------------------
+    # COMPLETED LEADS
+    # ------------------------------------------------------
+
     cursor.execute("""
         SELECT COUNT(*)
         FROM leads
@@ -482,6 +502,35 @@ def get_lead_statistics():
         "at_risk": at_risk,
         "completed": completed
     }
+
+
+# ==========================================================
+# 🧹 CLEAR ALL LEADS
+# ==========================================================
+
+def clear_all_leads():
+    """
+    Delete all leads from the database.
+
+    This is useful for clearing old demo/test
+    conversations before starting a fresh demo.
+    """
+
+    connection = sqlite3.connect(DATABASE_NAME)
+
+    cursor = connection.cursor()
+
+    cursor.execute(
+        "DELETE FROM leads"
+    )
+
+    deleted_count = cursor.rowcount
+
+    connection.commit()
+
+    connection.close()
+
+    return deleted_count
 
 
 # ==========================================================
@@ -532,21 +581,5 @@ if __name__ == "__main__":
             f"Score: {lead['lead_score']} | "
             f"Risk: {lead['risk_level']}"
         )
-  def clear_all_leads():
-    """Delete all leads from the database for a fresh demo."""
-
-    connection = sqlite3.connect(DATABASE_NAME)
-
-    cursor = connection.cursor()
-
-    cursor.execute("DELETE FROM leads")
-
-    connection.commit()
-
-    deleted_count = cursor.rowcount
-
-    connection.close()
-
-    return deleted_count
 
     print("\n" + "=" * 55)
