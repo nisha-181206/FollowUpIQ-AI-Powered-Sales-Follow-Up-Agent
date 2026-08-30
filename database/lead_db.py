@@ -5,6 +5,10 @@ from datetime import datetime, timedelta
 DATABASE_NAME = "database/followupiq.db"
 
 
+# ==========================================================
+# CREATE DATABASE
+# ==========================================================
+
 def create_database():
     """Create the leads table if it does not exist."""
 
@@ -47,6 +51,10 @@ def create_database():
     connection.close()
 
 
+# ==========================================================
+# SAVE / UPDATE LEAD
+# ==========================================================
+
 def save_lead(
     lead_name,
     company,
@@ -61,13 +69,20 @@ def save_lead(
     followup_message,
     days_until_followup=1
 ):
-    """Save a new lead only if the conversation is not already stored."""
+    """
+    Save a new lead.
+
+    If the same conversation already exists,
+    update the existing lead instead of creating
+    a duplicate record.
+    """
 
     connection = sqlite3.connect(DATABASE_NAME)
+
     cursor = connection.cursor()
 
     # ------------------------------------------------------
-    # PREVENT DUPLICATE CONVERSATIONS
+    # CHECK FOR EXISTING CONVERSATION
     # ------------------------------------------------------
 
     cursor.execute(
@@ -83,14 +98,8 @@ def save_lead(
 
     existing_lead = cursor.fetchone()
 
-    if existing_lead:
-
-        connection.close()
-
-        return existing_lead[0]
-
     # ------------------------------------------------------
-    # SAVE NEW LEAD
+    # CALCULATE FOLLOW-UP DATE
     # ------------------------------------------------------
 
     now = datetime.now()
@@ -98,6 +107,59 @@ def save_lead(
     followup_date = now + timedelta(
         days=days_until_followup
     )
+
+    # ------------------------------------------------------
+    # IF LEAD ALREADY EXISTS → UPDATE IT
+    # ------------------------------------------------------
+
+    if existing_lead:
+
+        lead_id = existing_lead[0]
+
+        cursor.execute(
+            """
+            UPDATE leads
+            SET
+                lead_name = ?,
+                company = ?,
+                lead_score = ?,
+                lead_priority = ?,
+                risk_score = ?,
+                risk_level = ?,
+                next_action = ?,
+                urgency = ?,
+                followup_subject = ?,
+                followup_message = ?,
+                last_contact = ?,
+                followup_due = ?
+            WHERE id = ?
+            """,
+            (
+                lead_name,
+                company,
+                lead_score,
+                lead_priority,
+                risk_score,
+                risk_level,
+                next_action,
+                urgency,
+                followup_subject,
+                followup_message,
+                now.strftime("%Y-%m-%d %H:%M:%S"),
+                followup_date.strftime("%Y-%m-%d %H:%M:%S"),
+                lead_id
+            )
+        )
+
+        connection.commit()
+
+        connection.close()
+
+        return lead_id
+
+    # ------------------------------------------------------
+    # OTHERWISE → CREATE NEW LEAD
+    # ------------------------------------------------------
 
     cursor.execute(
         """
@@ -147,6 +209,11 @@ def save_lead(
 
     return lead_id
 
+
+# ==========================================================
+# GET ALL LEADS
+# ==========================================================
+
 def get_all_leads():
     """Return all leads ordered by priority."""
 
@@ -164,6 +231,7 @@ def get_all_leads():
                 WHEN 'HOT' THEN 1
                 WHEN 'WARM' THEN 2
                 WHEN 'COLD' THEN 3
+                ELSE 4
             END,
             risk_score DESC,
             lead_score DESC
@@ -175,6 +243,11 @@ def get_all_leads():
 
     return leads
 
+
+# ==========================================================
+# FOLLOW-UP STATUS
+# ==========================================================
+
 def get_followup_status(followup_due, status):
     """Determine the current follow-up status."""
 
@@ -185,6 +258,7 @@ def get_followup_status(followup_due, status):
         return "Snoozed"
 
     try:
+
         due_date = datetime.strptime(
             followup_due,
             "%Y-%m-%d %H:%M:%S"
@@ -205,7 +279,13 @@ def get_followup_status(followup_due, status):
             return "UPCOMING"
 
     except Exception:
+
         return "UNKNOWN"
+
+
+# ==========================================================
+# SMART FOLLOW-UP LIST
+# ==========================================================
 
 def get_smart_followup_list():
     """Return leads ordered by follow-up urgency."""
@@ -237,6 +317,11 @@ def get_smart_followup_list():
 
     return leads
 
+
+# ==========================================================
+# FOLLOW-UP STATISTICS
+# ==========================================================
+
 def get_followup_statistics():
     """Calculate follow-up urgency statistics."""
 
@@ -255,15 +340,19 @@ def get_followup_statistics():
         )
 
         if status == "OVERDUE":
+
             overdue += 1
 
         elif status == "DUE TODAY":
+
             today += 1
 
         elif status == "DUE SOON":
+
             soon += 1
 
         elif status == "UPCOMING":
+
             upcoming += 1
 
     return {
@@ -273,6 +362,11 @@ def get_followup_statistics():
         "upcoming": upcoming
     }
 
+
+# ==========================================================
+# UPDATE LEAD STATUS
+# ==========================================================
+
 def update_lead_status(lead_id, status):
     """Update the status of a lead."""
 
@@ -280,14 +374,26 @@ def update_lead_status(lead_id, status):
 
     cursor = connection.cursor()
 
-    cursor.execute("""
+    cursor.execute(
+        """
         UPDATE leads
         SET status = ?
         WHERE id = ?
-    """, (status, lead_id))
+        """,
+        (
+            status,
+            lead_id
+        )
+    )
 
     connection.commit()
+
     connection.close()
+
+
+# ==========================================================
+# SNOOZE LEAD
+# ==========================================================
 
 def snooze_lead(lead_id, days):
     """Snooze a lead for a specified number of days."""
@@ -296,21 +402,34 @@ def snooze_lead(lead_id, days):
 
     cursor = connection.cursor()
 
-    new_followup_date = datetime.now() + timedelta(days=days)
+    new_followup_date = datetime.now() + timedelta(
+        days=days
+    )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         UPDATE leads
-        SET followup_due = ?,
+        SET
+            followup_due = ?,
             status = 'Snoozed'
         WHERE id = ?
-    """, (
-        new_followup_date.strftime("%Y-%m-%d %H:%M:%S"),
-        lead_id
-    ))
+        """,
+        (
+            new_followup_date.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+            lead_id
+        )
+    )
 
     connection.commit()
+
     connection.close()
 
+
+# ==========================================================
+# LEAD STATISTICS
+# ==========================================================
 
 def get_lead_statistics():
     """Return dashboard statistics."""
@@ -319,32 +438,40 @@ def get_lead_statistics():
 
     cursor = connection.cursor()
 
+    # Total leads
     cursor.execute(
         "SELECT COUNT(*) FROM leads"
     )
+
     total = cursor.fetchone()[0]
 
+    # Hot leads
     cursor.execute("""
         SELECT COUNT(*)
         FROM leads
         WHERE lead_priority = 'HOT'
         AND status = 'Pending'
     """)
+
     hot = cursor.fetchone()[0]
 
+    # High-risk leads
     cursor.execute("""
         SELECT COUNT(*)
         FROM leads
         WHERE risk_level = 'HIGH'
         AND status = 'Pending'
     """)
+
     at_risk = cursor.fetchone()[0]
 
+    # Completed leads
     cursor.execute("""
         SELECT COUNT(*)
         FROM leads
         WHERE status = 'Completed'
     """)
+
     completed = cursor.fetchone()[0]
 
     connection.close()
@@ -355,6 +482,7 @@ def get_lead_statistics():
         "at_risk": at_risk,
         "completed": completed
     }
+
 
 # ==========================================================
 # TEST DATABASE
@@ -375,15 +503,20 @@ if __name__ == "__main__":
         next_action="Send Pricing",
         urgency="Immediate",
         followup_subject="Enterprise Plan Pricing",
-        followup_message="Hi Rahul, sharing the pricing details...",
+        followup_message=(
+            "Hi Rahul, sharing the pricing details..."
+        ),
         days_until_followup=1
     )
 
     print("\n" + "=" * 55)
+
     print("FOLLOWUPIQ - DATABASE")
+
     print("=" * 55)
 
-    print(f"\nLead saved successfully!")
+    print("\nLead saved successfully!")
+
     print(f"Lead ID: {lead_id}")
 
     print("\nPrioritized Leads:")
@@ -399,6 +532,5 @@ if __name__ == "__main__":
             f"Score: {lead['lead_score']} | "
             f"Risk: {lead['risk_level']}"
         )
-    
 
     print("\n" + "=" * 55)
