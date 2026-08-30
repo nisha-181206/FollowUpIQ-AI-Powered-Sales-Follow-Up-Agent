@@ -1,82 +1,202 @@
 from groq import Groq
 from config import GROQ_API_KEY
 import json
+import re
 
 
-# Create Groq client
+# ==========================================================
+# CREATE GROQ CLIENT
+# ==========================================================
+
 client = Groq(api_key=GROQ_API_KEY)
 
 
+# ==========================================================
+# SALES CONVERSATION ANALYZER
+# ==========================================================
+
 def analyze_conversation(conversation: str):
-    """
-    Analyze a sales conversation and extract
-    important lead information.
-    """
 
     prompt = f"""
 You are FollowUpIQ, an AI Sales Conversation Intelligence Agent.
 
-Your job is to analyze a sales conversation and extract
-useful information about the prospect.
+Analyze the following sales conversation.
 
 SALES CONVERSATION:
 {conversation}
 
-Return ONLY valid JSON in exactly this structure:
+IMPORTANT:
+
+The prospect/customer is the person who is interested in
+the product, asks questions, requests pricing, discusses
+purchase, or talks about their manager/company.
+
+If the conversation starts with:
+
+"Hi Rahul"
+
+then Rahul is the prospect unless the conversation
+clearly says otherwise.
+
+Do NOT confuse the sales representative with the prospect.
+
+Return ONLY valid JSON.
+
+Use exactly this structure:
 
 {{
-    "lead_name": "",
-    "company": "",
-    "buying_intent": "",
-    "buying_stage": "",
-    "timeline": "",
+    "lead_name": "Unknown",
+    "company": "Unknown",
+    "buying_intent": "High",
+    "buying_stage": "Consideration",
+    "timeline": "Unknown",
     "pain_points": [],
-    "decision_maker": "",
+    "decision_maker": "Unknown",
     "buying_signals": [],
     "objections": []
 }}
 
-Rules:
+RULES:
 
-1. buying_intent must be:
-   "High", "Medium", or "Low"
+1. lead_name:
+Extract the prospect's name if clearly available.
 
-2. buying_stage must be:
-   "Awareness", "Consideration", "Decision", or "Not Ready"
+Example:
+"Hi Rahul" → "Rahul"
 
-3. If information is not available, write:
-   "Unknown"
+2. company:
+Extract the prospect's company only if explicitly mentioned.
+Otherwise use "Unknown".
 
-4. Do NOT invent information.
+3. buying_intent:
+Must be exactly:
+"High", "Medium", or "Low".
 
-5. buying_signals must contain specific positive
-   signals from the conversation.
+4. buying_stage:
+Must be exactly:
+"Awareness", "Consideration", "Decision", or "Not Ready".
 
-6. objections must contain specific concerns
-   mentioned by the prospect.
+5. timeline:
+Extract timing such as:
+"Today"
+"Tomorrow"
+"Next week"
+"Within a month"
 
-7. Keep the analysis concise and factual.
+6. pain_points:
+Only include actual problems mentioned.
+
+7. decision_maker:
+Extract manager, CTO, finance team, etc. if mentioned.
+
+8. buying_signals:
+Include specific positive signals such as:
+"Interested in enterprise plan"
+"Requested pricing"
+"Asked about implementation"
+
+9. objections:
+Only include actual objections or concerns.
+
+10. NEVER invent information.
+
+11. If information is unavailable, use:
+"Unknown"
+
+12. Return ONLY JSON.
 """
 
+
+    # ======================================================
+    # CALL GROQ
+    # ======================================================
+
     response = client.chat.completions.create(
+
         model="openai/gpt-oss-20b",
+
         messages=[
             {
                 "role": "system",
-                "content": "You are a precise sales intelligence agent."
+                "content": (
+                    "You are a precise sales intelligence agent. "
+                    "Identify the prospect correctly. "
+                    "Never invent names or companies."
+                )
             },
             {
                 "role": "user",
                 "content": prompt
             }
         ],
+
         temperature=0,
-        response_format={"type": "json_object"}
+
+        response_format={
+            "type": "json_object"
+        }
     )
 
-    result = response.choices[0].message.content
 
-    return json.loads(result)
+    # ======================================================
+    # PARSE RESPONSE
+    # ======================================================
+
+    result_text = response.choices[0].message.content
+
+    result = json.loads(result_text)
+
+
+    # ======================================================
+    # NAME FALLBACK
+    # ======================================================
+
+    name = result.get("lead_name", "Unknown")
+
+
+    if not name or name.lower() == "unknown":
+
+        patterns = [
+
+            r"\bHi\s+([A-Z][a-z]+)\b",
+
+            r"\bHello\s+([A-Z][a-z]+)\b",
+
+            r"\bHey\s+([A-Z][a-z]+)\b",
+
+            r"\bDear\s+([A-Z][a-z]+)\b"
+
+        ]
+
+        for pattern in patterns:
+
+            match = re.search(
+                pattern,
+                conversation
+            )
+
+            if match:
+
+                result["lead_name"] = match.group(1)
+
+                break
+
+
+    # ======================================================
+    # FINAL SAFETY
+    # ======================================================
+
+    if not result.get("lead_name"):
+
+        result["lead_name"] = "Unknown"
+
+
+    if not result.get("company"):
+
+        result["company"] = "Unknown"
+
+
+    return result
 
 
 # ==========================================================
@@ -88,31 +208,32 @@ if __name__ == "__main__":
     conversation = """
     Hi Rahul,
 
-    Thanks for attending our product demo.
+    I am interested in your enterprise plan.
+    Please send me pricing.
 
-    I really liked the enterprise plan and the reporting features.
-    Please send me the enterprise pricing details.
-
-    I'll discuss the pricing with my manager tomorrow
-    and get back to you.
-
-    Thanks.
+    I will discuss it with my manager tomorrow.
     """
 
-    print("\n" + "=" * 60)
-    print("FOLLOWUPIQ - SALES CONVERSATION ANALYZER")
+
     print("=" * 60)
 
-    result = analyze_conversation(conversation)
+    print("FOLLOWUPIQ - SALES CONVERSATION ANALYZER")
 
-    print("\nSALES CONVERSATION:")
-    print(conversation)
+    print("=" * 60)
 
-    print("\n" + "-" * 60)
-    print("AI ANALYSIS")
+
+    result = analyze_conversation(
+        conversation
+    )
+
+
+    print("\nAI ANALYSIS")
+
     print("-" * 60)
 
-    for key, value in result.items():
-        print(f"{key}: {value}")
 
-    print("\n" + "=" * 60)
+    for key, value in result.items():
+
+        print(
+            f"{key}: {value}"
+        )
