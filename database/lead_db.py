@@ -61,11 +61,37 @@ def save_lead(
     followup_message,
     days_until_followup=1
 ):
-    """Save a new lead to the database."""
+    """Save a new lead only if the conversation is not already stored."""
 
     connection = sqlite3.connect(DATABASE_NAME)
-
     cursor = connection.cursor()
+
+    # ------------------------------------------------------
+    # PREVENT DUPLICATE CONVERSATIONS
+    # ------------------------------------------------------
+
+    cursor.execute(
+        """
+        SELECT id
+        FROM leads
+        WHERE conversation = ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (conversation,)
+    )
+
+    existing_lead = cursor.fetchone()
+
+    if existing_lead:
+
+        connection.close()
+
+        return existing_lead[0]
+
+    # ------------------------------------------------------
+    # SAVE NEW LEAD
+    # ------------------------------------------------------
 
     now = datetime.now()
 
@@ -73,7 +99,8 @@ def save_lead(
         days=days_until_followup
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO leads (
             lead_name,
             company,
@@ -92,32 +119,25 @@ def save_lead(
             created_at
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-
-        lead_name,
-        company,
-        conversation,
-
-        lead_score,
-        lead_priority,
-
-        risk_score,
-        risk_level,
-
-        next_action,
-        urgency,
-
-        followup_subject,
-        followup_message,
-
-        now.strftime("%Y-%m-%d %H:%M:%S"),
-
-        followup_date.strftime("%Y-%m-%d %H:%M:%S"),
-
-        "Pending",
-
-        now.strftime("%Y-%m-%d %H:%M:%S")
-    ))
+        """,
+        (
+            lead_name,
+            company,
+            conversation,
+            lead_score,
+            lead_priority,
+            risk_score,
+            risk_level,
+            next_action,
+            urgency,
+            followup_subject,
+            followup_message,
+            now.strftime("%Y-%m-%d %H:%M:%S"),
+            followup_date.strftime("%Y-%m-%d %H:%M:%S"),
+            "Pending",
+            now.strftime("%Y-%m-%d %H:%M:%S")
+        )
+    )
 
     connection.commit()
 
@@ -126,7 +146,6 @@ def save_lead(
     connection.close()
 
     return lead_id
-
 
 def get_all_leads():
     """Return all leads ordered by priority."""
